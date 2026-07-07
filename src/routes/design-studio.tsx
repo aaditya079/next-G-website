@@ -1,82 +1,42 @@
-import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { PLOTS, whatsappLink } from "@/lib/site-data";
+import { PLOTS, COMPANY, whatsappLink } from "@/lib/site-data";
 import { PageHeader } from "@/components/site/PageHeader";
 import { Reveal } from "@/components/site/Reveal";
 import { PlotSketch } from "@/components/site/PlotSketch";
 import { 
-  ArrowRight, Sliders, MapPin, Maximize2, MessageCircle, Layout, Layers, HardHat, FileText 
+  ArrowRight, Sliders, MapPin, Maximize2, MessageCircle, Layout, Layers, HardHat, FileText, Check, AlertCircle, Loader2, Phone, User
 } from "lucide-react";
 
-interface Project {
-  id: string;
-  category: "2D" | "3D" | "Structure" | "BOQ";
-  title: string;
-  area: string;
-  planningDetails: string;
-  description: string;
-  imageUrl?: string;
-  otherInfo?: string;
+interface BOQLineItem {
+  id?: number;
+  item_name: string;
+  unit: string;
+  quantity: number;
+  rate: number;
+  amount?: number;
 }
 
-const DEFAULT_PROJECTS: Project[] = [
-  {
-    id: "p1",
-    category: "2D",
-    title: "1000 Square Meter Modern House Plan",
-    area: "1000 Sq. Meters",
-    planningDetails: "3 BHK, Double Floor, Modern Elevation",
-    description: "Detailed 2D floor plan layout containing dimensional bedroom details, kitchen positioning, and car parking space.",
-    imageUrl: "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&q=80&w=600",
-    otherInfo: "Best suited for East facing layouts. Vaastu compliant.",
-  },
-  {
-    id: "p2",
-    category: "2D",
-    title: "1200 Sq. Ft. Independent Villa Layout",
-    area: "1200 Sq. Feet",
-    planningDetails: "2 BHK, Single Floor, Vaastu Compliant",
-    description: "East facing villa layout with spacious hall, open kitchen, and private portico.",
-    imageUrl: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=600",
-    otherInfo: "Includes compound wall layouts.",
-  },
-  {
-    id: "p3",
-    category: "3D",
-    title: "Contemporary Villa 3D Exterior",
-    area: "2400 Sq. Feet",
-    planningDetails: "Modern Architecture, Wood & Stone finishes",
-    description: "Photorealistic 3D rendering of the building exterior with night lighting simulation and landscaping plan.",
-    imageUrl: "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&q=80&w=600",
-    otherInfo: "Simulated using real materials.",
-  },
-  {
-    id: "p4",
-    category: "Structure",
-    title: "Residential G+2 Reinforcement Detail",
-    area: "3000 Sq. Feet",
-    planningDetails: "Column & Beams framing, Foundation details",
-    description: "Structural engineering blueprint detailing reinforcement steel bar size specs, spacing, and concrete mix design.",
-    imageUrl: "https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&q=80&w=600",
-    otherInfo: "Designed for earthquake zone II.",
-  },
-  {
-    id: "p5",
-    category: "BOQ",
-    title: "Budget Estimate for 1500 Sq. Ft. House",
-    area: "1500 Sq. Feet",
-    planningDetails: "Premium Finish, Materials breakdown",
-    description: "Detailed Bill of Quantities showing cement, steel, bricks, flooring, sand, and plumbing cost estimates.",
-    imageUrl: "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&q=80&w=600",
-    otherInfo: "Based on local Madurai material rates.",
-  },
-];
+interface Project {
+  id: number;
+  category: "2D" | "3D" | "structure" | "BOQ";
+  title: string;
+  area?: string;
+  planning_details?: string;
+  description?: string;
+  image_url?: string;
+  other_info?: string;
+  status: "open" | "assigned" | "completed" | "paid";
+  line_items?: BOQLineItem[];
+}
 
 function formatINR(n: number) {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
 
 export default function DesignStudio() {
+  useEffect(() => {
+    document.title = "Design Studio · Project Board & Customizer — NG";
+  }, []);
   // Custom plot states
   const [length, setLength] = useState(40);
   const [breadth, setBreadth] = useState(30);
@@ -99,32 +59,110 @@ export default function DesignStudio() {
   const customMsg = `Hi NG, I'd like to commission a custom design for my plot. Dimensions: ${length}ft x ${breadth}ft (${sqft} sqft). Estimated fee: ${formatINR(designFee)}.${location ? " Location: " + location + "." : ""}`;
 
   // Portfolio states
-  const [activeTab, setActiveTab] = useState<"2D" | "3D" | "Structure" | "BOQ">("2D");
+  const [activeTab, setActiveTab] = useState<"2D" | "3D" | "structure" | "BOQ">("2D");
   const [portfolioProjects, setPortfolioProjects] = useState<Project[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState(false);
 
-  // Load from localStorage or defaults
+  // Acceptance Form States
+  const [acceptingProjectId, setAcceptingProjectId] = useState<number | null>(null);
+  const [clientName, setClientName] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [isSubmittingAccept, setIsSubmittingAccept] = useState(false);
+  const [acceptError, setAcceptError] = useState("");
+  const [acceptedProject, setAcceptedProject] = useState<Project | null>(null);
+
+  // Load from API
   useEffect(() => {
-    const saved = localStorage.getItem("ng_design_projects");
-    if (saved) {
-      try {
-        setPortfolioProjects(JSON.parse(saved));
-      } catch (e) {
-        setPortfolioProjects(DEFAULT_PROJECTS);
-      }
-    } else {
-      setPortfolioProjects(DEFAULT_PROJECTS);
-      localStorage.setItem("ng_design_projects", JSON.stringify(DEFAULT_PROJECTS));
-    }
-  }, []);
+    fetchActiveProjects();
+  }, [activeTab]);
 
-  const activeProjects = portfolioProjects.filter((p) => p.category === activeTab);
+  const fetchActiveProjects = async () => {
+    setIsLoadingList(true);
+    setAcceptError("");
+    try {
+      if (activeTab === "BOQ") {
+        const res = await fetch("/api/boq");
+        const data = await res.json() as Project[];
+        // Tag category for safety
+        const list = (data ?? []).map(p => ({ ...p, category: "BOQ" as const }));
+        setPortfolioProjects(list);
+      } else {
+        const res = await fetch(`/api/projects?category=${activeTab}`);
+        const data = await res.json() as Project[];
+        setPortfolioProjects(data ?? []);
+      }
+    } catch (e) {
+      console.error("Failed to fetch drawings list", e);
+    } finally {
+      setIsLoadingList(false);
+    }
+  };
+
+  const handleAcceptSubmit = async (e: React.FormEvent, proj: Project) => {
+    e.preventDefault();
+    if (!clientName || !clientPhone) {
+      setAcceptError("Name and Phone number are required.");
+      return;
+    }
+
+    setIsSubmittingAccept(true);
+    setAcceptError("");
+
+    try {
+      const isBoq = proj.category === "BOQ";
+      const queryParam = isBoq ? "?type=boq" : "";
+      
+      const res = await fetch(`/api/projects/${proj.id}/accept${queryParam}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: clientName, phone: clientPhone }),
+      });
+
+      if (res.ok) {
+        setAcceptedProject(proj);
+        // Refresh list
+        fetchActiveProjects();
+      } else if (res.status === 409) {
+        setAcceptError("Someone already accepted this project! The list has been refreshed.");
+        // Refresh list immediately
+        fetchActiveProjects();
+      } else {
+        const data = await res.json() as { error?: string };
+        setAcceptError(data.error ?? "Failed to accept this drawing. Please try again.");
+      }
+    } catch (err) {
+      setAcceptError("Connection error. Please check your network.");
+    } finally {
+      setIsSubmittingAccept(false);
+    }
+  };
+
+  const startAcceptance = (id: number) => {
+    setAcceptingProjectId(id);
+    setClientName("");
+    setClientPhone("");
+    setAcceptError("");
+    setAcceptedProject(null);
+  };
+
+  const cancelAcceptance = () => {
+    setAcceptingProjectId(null);
+    setClientName("");
+    setClientPhone("");
+    setAcceptError("");
+    setAcceptedProject(null);
+  };
+
+  const calculateBOQTotal = (items: BOQLineItem[] = []) => {
+    return items.reduce((sum, item) => sum + ((item.quantity ?? 0) * (item.rate ?? 0)), 0);
+  };
 
   return (
     <>
       <PageHeader
         eyebrow="Design Studio"
         title={<>Bring your plot to a <span className="text-orange">finished design.</span></>}
-        intro="Browse our available land plots or input your own dimensions to commission a custom architectural design directly with our engineering team — at a fixed, transparent cost. No agents, no back-and-forth."
+        intro="Browse our available land plots, explore live drawings on our project board, or input custom dimensions to commission a custom plan directly with our engineering team."
       />
 
       {/* INTERACTIVE CUSTOMIZER SECTION */}
@@ -271,26 +309,29 @@ export default function DesignStudio() {
         </div>
       </section>
 
-      {/* PORTFOLIO DRAWINGS BROWSER */}
+      {/* PORTFOLIO DRAWINGS BROWSER (PUBLIC BOARD) */}
       <section className="bg-offwhite border-b border-border">
         <div className="mx-auto max-w-7xl px-5 py-16 lg:px-8">
           <div className="mono-label mb-6 flex items-center gap-3 text-orange">
             <span className="h-px w-10 bg-orange" />
-            <span>02 · Browse Design Portfolios & Drawing Sheets</span>
+            <span>02 · Live Project Board & Drawing Sheets (Open Portfolios)</span>
           </div>
 
           <div className="flex border-b border-border bg-card p-2 rounded gap-2 mb-8">
             {[
               { id: "2D", label: "2D Plans", Icon: Layout },
               { id: "3D", label: "3D Views", Icon: Layers },
-              { id: "Structure", label: "Structure", Icon: HardHat },
+              { id: "structure", label: "Structure Plans", Icon: HardHat },
               { id: "BOQ", label: "BOQ Estimates", Icon: FileText },
             ].map((t) => {
               const TabIcon = t.Icon;
               return (
                 <button
                   key={t.id}
-                  onClick={() => setActiveTab(t.id as any)}
+                  onClick={() => {
+                    cancelAcceptance();
+                    setActiveTab(t.id as any);
+                  }}
                   className={`flex-1 flex justify-center items-center gap-2 py-3 text-xs md:text-sm font-mono border cursor-pointer transition-all ${
                     activeTab === t.id
                       ? "border-orange bg-orange text-white"
@@ -305,59 +346,165 @@ export default function DesignStudio() {
             })}
           </div>
 
-          {activeProjects.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground text-sm font-mono bg-card border border-border rounded">
-              ◤ No projects posted in this section yet.
+          {isLoadingList ? (
+            <div className="flex justify-center items-center py-20 gap-3 bg-card border border-border rounded">
+              <Loader2 className="animate-spin text-orange h-6 w-6" />
+              <span className="mono-label text-navy text-xs">Querying project board...</span>
+            </div>
+          ) : portfolioProjects.length === 0 ? (
+            <div className="text-center py-20 text-muted-foreground text-sm font-mono bg-card border border-border rounded">
+              ◤ All projects in this category are currently assigned. Check back later!
             </div>
           ) : (
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-              {activeProjects.map((proj, i) => {
-                const queryText = `Hi Next G, I'm interested in the ${proj.category} Project: "${proj.title}" (Area: ${proj.area}). Can we discuss this design?`;
+              {portfolioProjects.map((proj, i) => {
+                const isAccepting = acceptingProjectId === proj.id;
+                const isAcceptedSuccess = acceptedProject?.id === proj.id;
+
+                const whatsappMsg = `Hi Next G, I have accepted the drawing project "${proj.title}" (${proj.category}) on your Project Board. My name is ${clientName} and phone is ${clientPhone}. Let's discuss next steps.`;
+
                 return (
                   <Reveal key={proj.id} delay={i * 80}>
                     <div className="tick-frame hover-lift flex h-full flex-col border border-border bg-card">
-                      {proj.imageUrl && (
+                      {proj.image_url && (
                         <div className="aspect-[16/10] overflow-hidden bg-navy border-b border-border relative">
                           <img
-                            src={proj.imageUrl}
+                            src={proj.image_url}
                             alt={proj.title}
                             className="w-full h-full object-cover"
                           />
                         </div>
                       )}
+                      
                       <div className="flex flex-1 flex-col p-6 justify-between">
                         <div>
-                          <div className="mono-label text-orange text-xs">◤ {proj.category} drawing sheet</div>
+                          <div className="mono-label text-orange text-xs flex justify-between items-center">
+                            <span>◤ {proj.category} drawing sheet</span>
+                            <span className="px-2 py-0.5 border border-green-600 text-green-600 text-[9px] font-bold uppercase rounded-sm bg-green-50">Open</span>
+                          </div>
+                          
                           <h3 className="mt-2 font-display text-lg font-bold text-navy leading-tight">{proj.title}</h3>
 
-                          <dl className="mt-4 grid grid-cols-2 gap-4 border-y border-border py-3 my-4">
-                            <div>
-                              <dt className="mono-label text-muted-foreground text-[10px]">Area</dt>
-                              <dd className="font-mono text-sm font-semibold text-navy">{proj.area}</dd>
+                          {proj.category !== "BOQ" ? (
+                            <dl className="mt-4 grid grid-cols-2 gap-4 border-y border-border py-3 my-4">
+                              <div>
+                                <dt className="mono-label text-muted-foreground text-[10px]">Area</dt>
+                                <dd className="font-mono text-sm font-semibold text-navy">{proj.area || "—"}</dd>
+                              </div>
+                              <div>
+                                <dt className="mono-label text-muted-foreground text-[10px]">Planning</dt>
+                                <dd className="text-xs font-semibold text-navy leading-tight">{proj.planning_details || "—"}</dd>
+                              </div>
+                            </dl>
+                          ) : (
+                            <div className="mt-4 border-y border-border py-3 my-4">
+                              <span className="mono-label text-muted-foreground text-[10px] block mb-2">BOQ Line Items Breakdown</span>
+                              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                                {(proj.line_items ?? []).map((li, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-xs border-b border-border/40 pb-1 last:border-b-0">
+                                    <span className="text-navy">{li.item_name} <span className="text-[10px] text-muted-foreground font-mono">({li.quantity} {li.unit})</span></span>
+                                    <span className="font-mono font-semibold text-navy">{(li.quantity * li.rate).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</span>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="flex justify-between items-center font-mono text-xs mt-3 pt-2 border-t border-dashed border-border text-navy font-bold">
+                                <span>TOTAL ESTIMATE</span>
+                                <span className="text-orange">{calculateBOQTotal(proj.line_items).toLocaleString("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })}</span>
+                              </div>
                             </div>
-                            <div>
-                              <dt className="mono-label text-muted-foreground text-[10px]">Planning</dt>
-                              <dd className="text-xs font-semibold text-navy leading-tight">{proj.planningDetails}</dd>
-                            </div>
-                          </dl>
+                          )}
 
-                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">{proj.description}</p>
-                          {proj.otherInfo && (
-                            <div className="mt-3 text-[10px] text-orange font-mono">
-                              * {proj.otherInfo}
+                          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3 mb-4">{proj.description}</p>
+                          {proj.other_info && (
+                            <div className="text-[10px] text-orange font-mono mb-4">
+                              * Note: {proj.other_info}
                             </div>
                           )}
                         </div>
 
-                        <div className="mt-6">
-                          <a
-                            href={whatsappLink(queryText)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn-primary w-full justify-center flex items-center gap-2 cursor-pointer text-sm"
-                          >
-                            <MessageCircle size={14} /> Enquire on WhatsApp
-                          </a>
+                        {/* Acceptance Flow Actions */}
+                        <div className="mt-6 pt-4 border-t border-border/60">
+                          {isAcceptedSuccess ? (
+                            <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
+                              <div className="flex justify-center text-green-600 mb-2">
+                                <Check className="h-6 w-6 bg-green-100 rounded-full p-1" />
+                              </div>
+                              <h4 className="text-xs font-bold text-green-800">Drawing Successfully Accepted!</h4>
+                              <p className="text-[10px] text-green-700 mt-1">Connect with Next G Studio on WhatsApp to finalize contract details.</p>
+                              
+                              <a
+                                href={whatsappLink(whatsappMsg)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-primary w-full justify-center flex items-center gap-2 cursor-pointer text-xs mt-3 bg-green-600 hover:bg-green-700 border-green-600 hover:border-green-700"
+                              >
+                                <MessageCircle size={12} /> Contact via WhatsApp
+                              </a>
+                            </div>
+                          ) : isAccepting ? (
+                            <form onSubmit={(e) => handleAcceptSubmit(e, proj)} className="space-y-3 bg-offwhite/50 p-4 border border-border rounded">
+                              <div className="mono-label text-[9px] text-orange flex justify-between items-center">
+                                <span>◤ Confirm Acceptance</span>
+                                <button type="button" onClick={cancelAcceptance} className="text-navy hover:text-orange underline font-bold cursor-pointer">Cancel</button>
+                              </div>
+                              
+                              <div>
+                                <div className="relative">
+                                  <User size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                  <input
+                                    type="text"
+                                    required
+                                    placeholder="Enter your name"
+                                    value={clientName}
+                                    onChange={(e) => setClientName(e.target.value)}
+                                    className="w-full border border-border bg-card pl-7 pr-3 py-1.5 text-navy text-xs outline-none focus:border-orange rounded"
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div>
+                                <div className="relative">
+                                  <Phone size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                                  <input
+                                    type="tel"
+                                    required
+                                    placeholder="Enter phone number"
+                                    value={clientPhone}
+                                    onChange={(e) => setClientPhone(e.target.value)}
+                                    className="w-full border border-border bg-card pl-7 pr-3 py-1.5 text-navy text-xs outline-none focus:border-orange rounded"
+                                  />
+                                </div>
+                              </div>
+
+                              {acceptError && (
+                                <div className="flex items-start gap-1 text-[10px] text-red-600 bg-red-50 p-2 border border-red-200 rounded leading-snug">
+                                  <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                                  <span>{acceptError}</span>
+                                </div>
+                              )}
+
+                              <button
+                                type="submit"
+                                disabled={isSubmittingAccept}
+                                className="btn-primary w-full justify-center flex items-center gap-1.5 cursor-pointer text-xs"
+                              >
+                                {isSubmittingAccept ? (
+                                  <>
+                                    <Loader2 size={12} className="animate-spin text-orange" /> Submitting...
+                                  </>
+                                ) : (
+                                  <>Confirm Drawing</>
+                                )}
+                              </button>
+                            </form>
+                          ) : (
+                            <button
+                              onClick={() => startAcceptance(proj.id)}
+                              className="btn-primary w-full justify-center flex items-center gap-2 cursor-pointer text-xs"
+                            >
+                              Accept & Reserve Drawing <ArrowRight size={12} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>

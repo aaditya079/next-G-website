@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { NavLink, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { COMPANY } from "@/lib/site-data";
 import { Menu, X, Phone } from "lucide-react";
@@ -45,15 +45,18 @@ export function Header() {
         <div className="flex items-center gap-2">
           <nav className="hidden xl:flex items-center gap-1">
             {NAV.map((n) => (
-              <Link
+              <NavLink
                 key={n.to}
                 to={n.to}
-                activeOptions={{ exact: n.to === "/" }}
-                activeProps={{ className: "text-orange" }}
-                className="px-3 py-2 text-sm font-medium text-navy transition-colors hover:text-orange"
+                end={n.to === "/"}
+                className={({ isActive }) =>
+                  `px-3 py-2 text-sm font-medium transition-colors hover:text-orange ${
+                    isActive ? "text-orange" : "text-navy"
+                  }`
+                }
               >
                 {n.label}
-              </Link>
+              </NavLink>
             ))}
           </nav>
 
@@ -81,16 +84,19 @@ export function Header() {
         <nav className="border-t border-border bg-offwhite xl:hidden">
           <div className="mx-auto flex max-w-7xl flex-col px-5 py-2 lg:px-8">
             {NAV.map((n) => (
-              <Link
+              <NavLink
                 key={n.to}
                 to={n.to}
+                end={n.to === "/"}
                 onClick={() => setOpen(false)}
-                activeOptions={{ exact: n.to === "/" }}
-                activeProps={{ className: "text-orange" }}
-                className="border-b border-border/60 py-3 text-sm font-medium text-navy last:border-b-0"
+                className={({ isActive }) =>
+                  `border-b border-border/60 py-3 text-sm font-medium transition-colors hover:text-orange last:border-b-0 ${
+                    isActive ? "text-orange" : "text-navy"
+                  }`
+                }
               >
                 {n.label}
-              </Link>
+              </NavLink>
             ))}
           </div>
         </nav>

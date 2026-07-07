@@ -104,7 +104,11 @@ function apiResponse(data: any, status = 200, headers: Record<string, string> = 
   });
 }
 
-export const onRequest: PagesFunction<Env> = async (context) => {
+export const onRequest = async (context: {
+  request: Request;
+  env: Env;
+  params: { path?: string[] };
+}) => {
   const { request, env } = context;
   const url = new URL(request.url);
 

@@ -18,6 +18,19 @@ async function initializeDatabase(db: any) {
 
   await db.exec("CREATE TABLE IF NOT EXISTS boq_line_items (id INTEGER PRIMARY KEY AUTOINCREMENT, boq_project_id INTEGER REFERENCES boq_projects(id) ON DELETE CASCADE, item_name TEXT, unit TEXT, quantity REAL, rate REAL, amount REAL);");
 
+  // Phase 2 Migrations: Column additions
+  try {
+    await db.exec("ALTER TABLE projects ADD COLUMN source_file_url TEXT;").catch(() => {});
+    await db.exec("ALTER TABLE projects ADD COLUMN progress_percent INTEGER DEFAULT 0;").catch(() => {});
+    await db.exec("ALTER TABLE projects ADD COLUMN progress_notes TEXT;").catch(() => {});
+  } catch (e) {}
+
+  try {
+    await db.exec("ALTER TABLE boq_projects ADD COLUMN source_file_url TEXT;").catch(() => {});
+    await db.exec("ALTER TABLE boq_projects ADD COLUMN progress_percent INTEGER DEFAULT 0;").catch(() => {});
+    await db.exec("ALTER TABLE boq_projects ADD COLUMN progress_notes TEXT;").catch(() => {});
+  } catch (e) {}
+
   dbInitialized = true;
 }
 
@@ -206,6 +219,44 @@ export const onRequest = async (context: {
     } catch (e: any) {
       return apiResponse({ error: e.message }, 500);
     }
+  // GET /api/client/projects
+  if (url.pathname === "/api/client/projects" && request.method === "GET") {
+    const phone = url.searchParams.get("phone");
+    if (!phone) {
+      return apiResponse({ error: "Phone number parameter is required" }, 400);
+    }
+    try {
+      const { results: standard } = await env.DB.prepare(
+        "SELECT * FROM projects WHERE accepted_by_phone = ? ORDER BY id DESC"
+      ).bind(phone).all();
+
+      const { results: boqProjects } = await env.DB.prepare(
+        "SELECT * FROM boq_projects WHERE accepted_by_phone = ? ORDER BY id DESC"
+      ).bind(phone).all();
+
+      const { results: boqItems } = await env.DB.prepare("SELECT * FROM boq_line_items").all();
+
+      const itemsByProject: Record<number, any[]> = {};
+      boqItems.forEach((item: any) => {
+        if (!itemsByProject[item.boq_project_id]) {
+          itemsByProject[item.boq_project_id] = [];
+        }
+        itemsByProject[item.boq_project_id].push(item);
+      });
+
+      const boqWithItems = boqProjects.map((p: any) => ({
+        ...p,
+        category: "BOQ",
+        line_items: itemsByProject[p.id] ?? [],
+      }));
+
+      return apiResponse({
+        standard,
+        boq: boqWithItems
+      });
+    } catch (e: any) {
+      return apiResponse({ error: e.message }, 500);
+    }
   }
 
   // GET /api/images/:filename (R2 image server proxy)
@@ -352,9 +403,15 @@ export const onRequest = async (context: {
       if (body.category === "BOQ") {
         // Create BOQ project
         const info = await env.DB.prepare(
-          "INSERT INTO boq_projects (title, description) VALUES (?, ?)"
+          "INSERT INTO boq_projects (title, description, source_file_url, progress_percent, progress_notes) VALUES (?, ?, ?, ?, ?)"
         )
-          .bind(body.title, body.description)
+          .bind(
+            body.title, 
+            body.description,
+            body.source_file_url || null,
+            Number(body.progress_percent) || 0,
+            body.progress_notes || null
+          )
           .run();
 
         const boqId = info.meta.last_row_id;
@@ -384,7 +441,7 @@ export const onRequest = async (context: {
         }
 
         await env.DB.prepare(
-          "INSERT INTO projects (category, title, area, planning_details, description, image_url, other_info) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO projects (category, title, area, planning_details, description, image_url, other_info, source_file_url, progress_percent, progress_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
           .bind(
             body.category,
@@ -393,7 +450,10 @@ export const onRequest = async (context: {
             body.planning_details || "",
             body.description || "",
             body.image_url || "",
-            body.other_info || ""
+            body.other_info || "",
+            body.source_file_url || null,
+            Number(body.progress_percent) || 0,
+            body.progress_notes || null
           )
           .run();
 
@@ -433,8 +493,15 @@ export const onRequest = async (context: {
 
       // Edit action
       if (isBoq) {
-        await env.DB.prepare("UPDATE boq_projects SET title = ?, description = ? WHERE id = ?")
-          .bind(body.title, body.description, id)
+        await env.DB.prepare("UPDATE boq_projects SET title = ?, description = ?, source_file_url = ?, progress_percent = ?, progress_notes = ? WHERE id = ?")
+          .bind(
+            body.title,
+            body.description,
+            body.source_file_url || null,
+            Number(body.progress_percent) || 0,
+            body.progress_notes || null,
+            id
+          )
           .run();
 
         await env.DB.prepare("DELETE FROM boq_line_items WHERE boq_project_id = ?").bind(id).run();
@@ -458,7 +525,7 @@ export const onRequest = async (context: {
         }
       } else {
         await env.DB.prepare(
-          "UPDATE projects SET title = ?, area = ?, planning_details = ?, description = ?, image_url = ?, other_info = ? WHERE id = ?"
+          "UPDATE projects SET title = ?, area = ?, planning_details = ?, description = ?, image_url = ?, other_info = ?, source_file_url = ?, progress_percent = ?, progress_notes = ? WHERE id = ?"
         )
           .bind(
             body.title,
@@ -467,6 +534,9 @@ export const onRequest = async (context: {
             body.description || "",
             body.image_url || "",
             body.other_info || "",
+            body.source_file_url || null,
+            Number(body.progress_percent) || 0,
+            body.progress_notes || null,
             id
           )
           .run();
@@ -492,17 +562,29 @@ export const onRequest = async (context: {
     }
 
     try {
-      const body = (await request.json()) as { status?: string };
+      const body = (await request.json()) as { status?: string; progress_percent?: number; progress_notes?: string };
       if (!body.status || !["open", "assigned", "completed", "paid"].includes(body.status)) {
         return apiResponse({ error: "Invalid status state" }, 400);
       }
 
       if (isBoq) {
-        await env.DB.prepare("UPDATE boq_projects SET status = ? WHERE id = ?")
-          .bind(body.status, id)
+        await env.DB.prepare("UPDATE boq_projects SET status = ?, progress_percent = ?, progress_notes = ? WHERE id = ?")
+          .bind(
+            body.status, 
+            body.progress_percent !== undefined ? Number(body.progress_percent) : 0,
+            body.progress_notes || null,
+            id
+          )
           .run();
       } else {
-        await env.DB.prepare("UPDATE projects SET status = ? WHERE id = ?").bind(body.status, id).run();
+        await env.DB.prepare("UPDATE projects SET status = ?, progress_percent = ?, progress_notes = ? WHERE id = ?")
+          .bind(
+            body.status, 
+            body.progress_percent !== undefined ? Number(body.progress_percent) : 0,
+            body.progress_notes || null,
+            id
+          )
+          .run();
       }
       return apiResponse({ success: true });
     } catch (e: any) {

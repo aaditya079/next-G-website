@@ -11,6 +11,8 @@ import About from "./routes/about";
 import Projects from "./routes/projects";
 import ProjectDetail from "./routes/projects.$slug";
 import DesignStudio from "./routes/design-studio";
+import CostCalculator from "./routes/cost-calculator";
+import ClientPortal from "./routes/client-portal";
 import Services from "./routes/services";
 import Testimonials from "./routes/testimonials";
 import Contact from "./routes/contact";
@@ -40,6 +42,8 @@ export function App() {
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:slug" element={<ProjectDetail />} />
           <Route path="/design-studio" element={<DesignStudio />} />
+          <Route path="/cost-calculator" element={<CostCalculator />} />
+          <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/services" element={<Services />} />
           <Route path="/testimonials" element={<Testimonials />} />
           <Route path="/contact" element={<Contact />} />

@@ -28,6 +28,9 @@ interface Project {
   accepted_by_phone?: string;
   accepted_at?: string;
   line_items?: BOQLineItem[];
+  source_file_url?: string;
+  progress_percent?: number;
+  progress_notes?: string;
 }
 
 const STATUS_STATES = ["open", "assigned", "completed", "paid"] as const;
@@ -210,6 +213,7 @@ export default function AdminPortal() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingCAD, setIsUploadingCAD] = useState(false);
 
   // Check login state on mount
   useEffect(() => {
@@ -303,6 +307,32 @@ export default function AdminPortal() {
     }
   };
 
+  const handleCADUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingCAD(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await fetch("/api/admin/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json() as { url?: string; error?: string };
+      if (res.ok && data.url) {
+        setCurrentProject((prev) => ({ ...prev, source_file_url: data.url }));
+      } else {
+        alert(data.error ?? "CAD Blueprint upload failed.");
+      }
+    } catch (err) {
+      alert("Failed to upload CAD blueprint to server.");
+    } finally {
+      setIsUploadingCAD(false);
+    }
+  };
+
   const handleAddClick = () => {
     setIsEditing(false);
     if (activeTab === "BOQ") {
@@ -311,6 +341,9 @@ export default function AdminPortal() {
         title: "",
         description: "",
         line_items: [{ item_name: "", unit: "", quantity: 0, rate: 0 }],
+        source_file_url: "",
+        progress_percent: 0,
+        progress_notes: "",
       });
     } else {
       setCurrentProject({
@@ -321,6 +354,9 @@ export default function AdminPortal() {
         description: "",
         image_url: "",
         other_info: "",
+        source_file_url: "",
+        progress_percent: 0,
+        progress_notes: "",
       });
     }
     setShowFormModal(true);
@@ -364,12 +400,30 @@ export default function AdminPortal() {
     if (currentIndex === -1 || currentIndex === STATUS_STATES.length - 1) return;
 
     const nextStatus = STATUS_STATES[currentIndex + 1];
+    let newProgress = proj.progress_percent ?? 0;
+    let newNotes = proj.progress_notes ?? "";
+
+    if (nextStatus === "assigned" && newProgress < 10) {
+      newProgress = 10;
+      newNotes = "Project assigned and design planning initiated.";
+    } else if (nextStatus === "completed") {
+      newProgress = 100;
+      newNotes = "Construction completed. Handing over finalized drawing blueprints.";
+    } else if (nextStatus === "paid") {
+      newProgress = 100;
+      newNotes = "Final payment settled. Project archived.";
+    }
+
     try {
       const queryParam = proj.category === "BOQ" ? "?type=boq" : "";
       const res = await fetch(`/api/admin/projects/${proj.id}/status${queryParam}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ 
+          status: nextStatus,
+          progress_percent: newProgress,
+          progress_notes: newNotes
+        }),
       });
       if (res.ok) {
         fetchProjects();
@@ -1005,6 +1059,81 @@ export default function AdminPortal() {
                 </>
               )}
 
+              {/* CAD Source File & Construction Progress Tracking (Applies to both) */}
+              <div className="border-t border-border pt-4 mt-6 space-y-4">
+                <span className="mono-label block text-xs font-bold text-orange uppercase tracking-wider">
+                  ◤ Blueprint Files & Client Progress Tracking
+                </span>
+
+                <div className="grid gap-4 md:grid-cols-[1fr_auto] items-end">
+                  <div>
+                    <label className="mono-label block text-[10px] text-navy font-semibold mb-1">
+                      CAD Blueprint Sheet / DWG Source File (R2 Storage)
+                    </label>
+                    <input
+                      type="text"
+                      readOnly
+                      placeholder="CAD blueprint file path will auto-populate after upload"
+                      value={currentProject.source_file_url || ""}
+                      className="w-full border border-border bg-offwhite/50 px-3 py-2 text-navy text-sm outline-none rounded text-muted-foreground"
+                    />
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      id="cad-file"
+                      accept=".dwg,.dxf,.pdf,.zip,.rar,image/*"
+                      onChange={handleCADUpload}
+                      className="hidden"
+                      disabled={isUploadingCAD}
+                    />
+                    <label
+                      htmlFor="cad-file"
+                      className="btn-ghost text-navy flex items-center gap-2 border border-border px-4 py-2 hover:border-orange hover:text-orange cursor-pointer"
+                      style={{ borderRadius: 2 }}
+                    >
+                      {isUploadingCAD ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin text-orange" /> Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={14} /> Upload CAD
+                        </>
+                      )}
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3 items-center bg-offwhite/50 p-4 border border-border rounded font-sans">
+                  <div className="md:col-span-1">
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="mono-label text-[10px] text-navy font-semibold">Construction Progress</label>
+                      <span className="font-mono text-xs text-orange font-bold">{currentProject.progress_percent ?? 0}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={currentProject.progress_percent ?? 0}
+                      onChange={(e) => setCurrentProject({ ...currentProject, progress_percent: Number(e.target.value) })}
+                      className="w-full h-1 bg-border rounded-lg appearance-none cursor-pointer accent-orange"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="mono-label block text-[10px] text-navy font-semibold mb-1">Progress Notes / Site Log</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Concrete slab cured. Flooring work started."
+                      value={currentProject.progress_notes || ""}
+                      onChange={(e) => setCurrentProject({ ...currentProject, progress_notes: e.target.value })}
+                      className="w-full border border-border bg-card px-3 py-1.5 text-navy text-xs outline-none focus:border-orange rounded"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-3 justify-end pt-4 border-t border-border mt-6">
                 <button
                   type="button"
@@ -1016,7 +1145,7 @@ export default function AdminPortal() {
                 </button>
                 <button
                   type="submit"
-                  disabled={isSaving || isUploading}
+                  disabled={isSaving || isUploading || isUploadingCAD}
                   className="btn-primary px-4 py-2 text-xs md:text-sm cursor-pointer flex items-center gap-2"
                 >
                   {isSaving ? (

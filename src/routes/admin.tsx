@@ -911,43 +911,7 @@ export default function AdminPortal() {
                     />
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-[1fr_auto] items-end">
-                    <div>
-                      <label className="mono-label block text-[10px] text-navy font-semibold mb-1">Drawing Image (R2 Storage)</label>
-                      <input
-                        type="text"
-                        readOnly
-                        placeholder="R2 image path will auto-populate here after upload"
-                        value={currentProject.image_url || ""}
-                        className="w-full border border-border bg-offwhite/50 px-3 py-2 text-navy text-sm outline-none rounded text-muted-foreground"
-                      />
-                    </div>
-                    <div className="relative">
-                      <input
-                        type="file"
-                        id="image-file"
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                        className="hidden"
-                        disabled={isUploading}
-                      />
-                      <label
-                        htmlFor="image-file"
-                        className="btn-ghost text-navy flex items-center gap-2 border border-border px-4 py-2 hover:border-orange hover:text-orange cursor-pointer"
-                        style={{ borderRadius: 2 }}
-                      >
-                        {isUploading ? (
-                          <>
-                            <Loader2 size={14} className="animate-spin text-orange" /> Uploading...
-                          </>
-                        ) : (
-                          <>
-                            <Upload size={14} /> Upload Image
-                          </>
-                        )}
-                      </label>
-                    </div>
-                  </div>
+
 
                   <div>
                     <label className="mono-label block text-[10px] text-navy font-semibold mb-1">Other Related Information</label>
@@ -1059,51 +1023,11 @@ export default function AdminPortal() {
                 </>
               )}
 
-              {/* CAD Source File & Construction Progress Tracking (Applies to both) */}
+              {/* Construction Progress Tracking (Applies to both) */}
               <div className="border-t border-border pt-4 mt-6 space-y-4">
                 <span className="mono-label block text-xs font-bold text-orange uppercase tracking-wider">
-                  ◤ Blueprint Files & Client Progress Tracking
+                  ◤ Client Progress Tracking
                 </span>
-
-                <div className="grid gap-4 md:grid-cols-[1fr_auto] items-end">
-                  <div>
-                    <label className="mono-label block text-[10px] text-navy font-semibold mb-1">
-                      CAD Blueprint Sheet / DWG Source File (R2 Storage)
-                    </label>
-                    <input
-                      type="text"
-                      readOnly
-                      placeholder="CAD blueprint file path will auto-populate after upload"
-                      value={currentProject.source_file_url || ""}
-                      className="w-full border border-border bg-offwhite/50 px-3 py-2 text-navy text-sm outline-none rounded text-muted-foreground"
-                    />
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="file"
-                      id="cad-file"
-                      accept=".dwg,.dxf,.pdf,.zip,.rar,image/*"
-                      onChange={handleCADUpload}
-                      className="hidden"
-                      disabled={isUploadingCAD}
-                    />
-                    <label
-                      htmlFor="cad-file"
-                      className="btn-ghost text-navy flex items-center gap-2 border border-border px-4 py-2 hover:border-orange hover:text-orange cursor-pointer"
-                      style={{ borderRadius: 2 }}
-                    >
-                      {isUploadingCAD ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin text-orange" /> Uploading...
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={14} /> Upload CAD
-                        </>
-                      )}
-                    </label>
-                  </div>
-                </div>
 
                 <div className="grid gap-4 md:grid-cols-3 items-center bg-offwhite/50 p-4 border border-border rounded font-sans">
                   <div className="md:col-span-1">

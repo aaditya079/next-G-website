@@ -221,46 +221,6 @@ export const onRequest = async (context: {
     }
   }
 
-  // GET /api/client/projects
-  if (url.pathname === "/api/client/projects" && request.method === "GET") {
-    const phone = url.searchParams.get("phone");
-    if (!phone) {
-      return apiResponse({ error: "Phone number parameter is required" }, 400);
-    }
-    try {
-      const { results: standard } = await env.DB.prepare(
-        "SELECT * FROM projects WHERE accepted_by_phone = ? ORDER BY id DESC"
-      ).bind(phone).all();
-
-      const { results: boqProjects } = await env.DB.prepare(
-        "SELECT * FROM boq_projects WHERE accepted_by_phone = ? ORDER BY id DESC"
-      ).bind(phone).all();
-
-      const { results: boqItems } = await env.DB.prepare("SELECT * FROM boq_line_items").all();
-
-      const itemsByProject: Record<number, any[]> = {};
-      boqItems.forEach((item: any) => {
-        if (!itemsByProject[item.boq_project_id]) {
-          itemsByProject[item.boq_project_id] = [];
-        }
-        itemsByProject[item.boq_project_id].push(item);
-      });
-
-      const boqWithItems = boqProjects.map((p: any) => ({
-        ...p,
-        category: "BOQ",
-        line_items: itemsByProject[p.id] ?? [],
-      }));
-
-      return apiResponse({
-        standard,
-        boq: boqWithItems
-      });
-    } catch (e: any) {
-      return apiResponse({ error: e.message }, 500);
-    }
-  }
-
   // GET /api/images/:filename (R2 image server proxy)
   if (url.pathname.startsWith("/api/images/")) {
     if (!env.BUCKET) {

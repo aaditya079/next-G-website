@@ -6,6 +6,7 @@ import { Counter } from "@/components/site/Counter";
 import { Reveal } from "@/components/site/Reveal";
 import { SectionHeading } from "@/components/site/SectionHeading";
 import { HeroVisual } from "@/components/site/HeroVisual";
+import { ScrollSequence } from "@/components/site/ScrollSequence";
 
 const FALLBACK_TESTIMONIALS = [
   {
@@ -137,6 +138,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* 3D CONSTRUCTION TIMELINE SIMULATOR */}
+      <ScrollSequence />
 
       {/* FEATURED PROJECTS */}
       <section className="relative bg-offwhite bp-grid">
